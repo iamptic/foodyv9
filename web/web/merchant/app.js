@@ -320,7 +320,7 @@
       // Fallback preview (works without FilePond)
       if (photoEl) {
         photoEl.addEventListener('change', () => {
-          if (window.FilePond) return; // FilePond will handle preview
+          if (document.querySelector('.filepond--root')) return; // уже применён FilePond — превью делает он
           const f = photoEl.files && photoEl.files[0];
           const wrap = document.getElementById('photoPreviewWrap');
           const img = document.getElementById('photoPreview');
@@ -365,6 +365,14 @@
     } catch (err) { console.warn('Create init failed', err); }
   }
 
+  // If "Создать" уже активна (после fallback/перезагрузки) — инициируем UI
+  try {
+    const cPane = document.querySelector('#create');
+    if (cPane && cPane.classList.contains('active')) {
+      initCreateTab && initCreateTab();
+    }
+  } catch (_) {}
+  
   // Init
   gate();
 })();
