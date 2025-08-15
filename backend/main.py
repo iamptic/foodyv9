@@ -1,4 +1,5 @@
-import os, mimetypes
+import os
+import mimetypes
 from uuid import uuid4
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
@@ -10,8 +11,11 @@ from fastapi.responses import JSONResponse
 
 import bcrypt
 import jwt  # PyJWT
+
+# защитимся от установки неправильного пакета `jwt`
 if not hasattr(jwt, "encode") or not hasattr(jwt, "decode"):
-    raise RuntimeError("Wrong jwt package installed. Ensure PyJWT is in requirements and `jwt` is not.")
+    raise RuntimeError("Wrong jwt package installed. Ensure PyJWT is in requirements and package `jwt` is NOT installed.")
+
 import boto3
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
@@ -23,14 +27,17 @@ R2_ENDPOINT = os.environ.get("R2_ENDPOINT")
 R2_BUCKET = os.environ.get("R2_BUCKET")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
+
 JWT_SECRET = os.environ.get("RECOVERY_SECRET", "devsecret")
 JWT_ALG = "HS256"
 SESSION_COOKIE = "foody_session"
+
 NO_PHOTO_URL = "https://foodyweb-production.up.railway.app/img/no-photo.png"
 
-# ===== APP/CORS =====
+# ===== APP / CORS =====
 app = FastAPI()
 _pool: asyncpg.pool.Pool | None = None
+
 origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -40,38 +47,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ===== helpers =====
+# ===== Helpers =====
 def _hash_pw(pw: str) -> str:
     return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 def _check_pw(pw: str, hashed: str) -> bool:
-    try: return bcrypt.checkpw(pw.encode("utf-8"), hashed.encode("utf-8"))
-    except: return False
+    try:
+        return bcrypt.checkpw(pw.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 def _issue_jwt(user_id: int) -> str:
-    return jwt.encode({"sub": user_id, "iat": int(datetime.utcnow().timestamp())}, JWT_SECRET, algorithm=JWT_ALG)
+    payload = {"sub": user_id, "iat": int(datetime.utcnow().timestamp())}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
 def _decode_jwt(token: str) -> Optional[dict]:
-    try: return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-    except: return None
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except Exception:
+        return None
 
-async def get_current_user(req: Request):
-    token = req.cookies.get(SESSION_COOKIE)
-    if not token: raise HTTPException(status_code=401, detail="Not authenticated")
+async def get_current_user(request: Request):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     data = _decode_jwt(token)
-    if not data or "sub" not in data: raise HTTPException(status_code=401, detail="Invalid token")
-    uid = int(data["sub"])
+    if not data or "sub" not in data:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user_id = int(data["sub"])
     async with _pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT id, phone, name FROM users WHERE id=$1", uid)
-    if not row: raise HTTPException(status_code=401, detail="User not found")
-    return dict(row)
+        user = await conn.fetchrow("SELECT id, phone, name FROM users WHERE id=$1", user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return dict(user)
 
 def _cookie_response(payload: dict, token: str) -> JSONResponse:
     resp = JSONResponse(payload)
-    resp.set_cookie(SESSION_COOKIE, token, httponly=True, secure=True, samesite="lax", max_age=60*60*24*30, path="/")
+    resp.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+        path="/",
+    )
     return resp
 
-# ===== auto-migrate =====
+# ===== Auto-migrations (idempotent) =====
 DDL = """
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
@@ -106,7 +129,7 @@ CREATE TABLE IF NOT EXISTS locations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- для совместимости со старыми местами
+-- для совместимости со старой схемой
 CREATE TABLE IF NOT EXISTS merchants (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -118,7 +141,7 @@ CREATE TABLE IF NOT EXISTS merchants (
 CREATE TABLE IF NOT EXISTS offers (
   id SERIAL PRIMARY KEY,
   merchant_id INT REFERENCES merchants(id) ON DELETE SET NULL,
-  location_id INT REFERENCES locations(id) ON DELETE CASCADE,
+  -- колонка location_id добавляется ALTER'ом ниже (чтобы не падать на уже существующих БД)
   title TEXT NOT NULL,
   description TEXT,
   category TEXT,
@@ -131,33 +154,42 @@ CREATE TABLE IF NOT EXISTS offers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_offers_expires ON offers(expires_at);
-CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status);
-CREATE INDEX IF NOT EXISTS idx_offers_location ON offers(location_id);
+CREATE INDEX IF NOT EXISTS idx_offers_status  ON offers(status);
 """
 
 ALTERS = [
-    # Если у тебя ранее не было расширенных полей — добавим их идемпотентно
-    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS city TEXT",
-    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS address_line TEXT",
-    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS closing_time TEXT",
-    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS timezone TEXT",
-    # На случай старых offers без location_id
-    "ALTER TABLE offers     ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id) ON DELETE CASCADE",
+    # расширенные поля на старом merchants (не критично, но удобно)
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS city TEXT",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS address_line TEXT",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS closing_time TEXT",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS timezone TEXT",
+
+    # ключевая колонка для привязки офферов к локациям
+    "ALTER TABLE offers ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id) ON DELETE CASCADE",
+]
+
+INDEXES_LATE = [
+    # создаём индекс по location_id только ПОСЛЕ добавления колонки
+    "CREATE INDEX IF NOT EXISTS idx_offers_location ON offers(location_id)",
 ]
 
 @app.on_event("startup")
 async def startup():
     global _pool
-    if not DATABASE_URL: raise RuntimeError("DATABASE_URL missing")
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL missing")
     _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
     async with _pool.acquire() as conn:
         async with conn.transaction():
             await conn.execute(DDL)
             for sql in ALTERS:
                 await conn.execute(sql)
+            for sql in INDEXES_LATE:
+                await conn.execute(sql)
 
 @app.get("/health")
-async def health(): return {"ok": True}
+async def health():
+    return {"ok": True}
 
 # ===== R2 upload =====
 def _r2_client():
@@ -174,42 +206,52 @@ def _r2_client():
 
 def _pub_url_or_none(key: str) -> Optional[str]:
     try:
-        host = R2_ENDPOINT.split("//",1)[-1]
-        account = host.split(".",1)[0]
+        host = R2_ENDPOINT.split("//", 1)[-1]
+        account = host.split(".", 1)[0]
         return f"https://pub-{account}.r2.dev/{R2_BUCKET}/{key}"
-    except: return None
+    except Exception:
+        return None
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     try:
         ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
-        if ext not in [".jpg",".jpeg",".png",".webp"]:
+        if ext not in [".jpg", ".jpeg", ".png", ".webp"]:
             raise HTTPException(status_code=400, detail="Unsupported image type")
+
         content = await file.read()
         key = f"offers/{uuid4().hex}{ext}"
+
         s3 = _r2_client()
         ctype = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
         s3.put_object(Bucket=R2_BUCKET, Key=key, Body=content, ContentType=ctype)
+
         public_url = _pub_url_or_none(key)
         display_url = public_url or s3.generate_presigned_url(
-            ClientMethod="get_object", Params={"Bucket": R2_BUCKET, "Key": key}, ExpiresIn=60*60*24*365
+            ClientMethod="get_object",
+            Params={"Bucket": R2_BUCKET, "Key": key},
+            ExpiresIn=60 * 60 * 24 * 365,
         )
         return {"url": public_url, "display_url": display_url, "key": key}
     except (BotoCoreError, ClientError) as e:
-        print("UPLOAD_ERROR_S3:", repr(e)); raise HTTPException(500, f"Upload failed (S3): {e}")
+        print("UPLOAD_ERROR_S3:", repr(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed (S3): {e}")
     except Exception as e:
-        print("UPLOAD_ERROR:", repr(e)); raise HTTPException(500, f"Upload failed: {e}")
+        print("UPLOAD_ERROR:", repr(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
-# ===== auth =====
+# ===== Auth =====
 @app.post("/auth/register")
 async def register(payload: Dict[str, Any] = Body(...)):
-    # ожидаем: name, phone, password, city, address_line, closing_time, timezone (опционально)
-    for r in ["name","phone","password"]:
-        if not str(payload.get(r,"")).strip():
-            raise HTTPException(400, f"Field {r} is required")
+    # ожидаем: name, phone, password, (опц.) city, address_line, closing_time, timezone
+    for r in ["name", "phone", "password"]:
+        if not str(payload.get(r, "")).strip():
+            raise HTTPException(status_code=400, detail=f"Field {r} is required")
+
     name = payload["name"].strip()
     phone = payload["phone"].strip()
     password_hash = _hash_pw(payload["password"])
+
     city = (payload.get("city") or "").strip()
     address_line = (payload.get("address_line") or "").strip()
     closing_time = (payload.get("closing_time") or "").strip()
@@ -218,17 +260,31 @@ async def register(payload: Dict[str, Any] = Body(...)):
     async with _pool.acquire() as conn:
         async with conn.transaction():
             u = await conn.fetchrow("SELECT id FROM users WHERE phone=$1", phone)
-            if u: raise HTTPException(409, "Phone already registered")
+            if u:
+                raise HTTPException(status_code=409, detail="Phone already registered")
+
             user_id = await conn.fetchval(
                 "INSERT INTO users (phone, password_hash, name) VALUES ($1,$2,$3) RETURNING id",
                 phone, password_hash, name
             )
-            org_id = await conn.fetchval("INSERT INTO organizations (name) VALUES ($1) RETURNING id", name)
-            await conn.execute("INSERT INTO organization_users (org_id,user_id,role) VALUES ($1,$2,'owner')", org_id, user_id)
+
+            org_id = await conn.fetchval(
+                "INSERT INTO organizations (name) VALUES ($1) RETURNING id", name
+            )
+            await conn.execute(
+                "INSERT INTO organization_users (org_id, user_id, role) VALUES ($1,$2,'owner')",
+                org_id, user_id
+            )
+
             loc_id = await conn.fetchval(
-                "INSERT INTO locations (org_id, name, city, address_line, closing_time, timezone) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
+                """
+                INSERT INTO locations (org_id, name, city, address_line, closing_time, timezone)
+                VALUES ($1,$2,$3,$4,$5,$6)
+                RETURNING id
+                """,
                 org_id, name, city, address_line, closing_time, timezone_str
             )
+
     token = _issue_jwt(user_id)
     return _cookie_response({"user_id": user_id, "org_id": org_id, "location_id": loc_id}, token)
 
@@ -236,11 +292,14 @@ async def register(payload: Dict[str, Any] = Body(...)):
 async def login(payload: Dict[str, Any] = Body(...)):
     phone = (payload.get("phone") or "").strip()
     password = payload.get("password") or ""
-    if not phone or not password: raise HTTPException(400, "Phone and password are required")
+    if not phone or not password:
+        raise HTTPException(status_code=400, detail="Phone and password are required")
+
     async with _pool.acquire() as conn:
         user = await conn.fetchrow("SELECT id, password_hash FROM users WHERE phone=$1", phone)
         if not user or not _check_pw(password, user["password_hash"]):
-            raise HTTPException(401, "Invalid credentials")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
     token = _issue_jwt(user["id"])
     return _cookie_response({"user_id": user["id"]}, token)
 
@@ -248,14 +307,16 @@ async def login(payload: Dict[str, Any] = Body(...)):
 async def me(user = Depends(get_current_user)):
     async with _pool.acquire() as conn:
         orgs = await conn.fetch("""
-          SELECT o.id, o.name, ou.role
-          FROM organization_users ou JOIN organizations o ON o.id=ou.org_id
-          WHERE ou.user_id=$1
+            SELECT o.id, o.name, ou.role
+            FROM organization_users ou
+            JOIN organizations o ON o.id = ou.org_id
+            WHERE ou.user_id=$1
         """, user["id"])
         locs = await conn.fetch("""
-          SELECT l.id, l.org_id, l.name, l.city, l.address_line, l.closing_time, l.timezone
-          FROM locations l WHERE l.org_id IN (SELECT org_id FROM organization_users WHERE user_id=$1)
-          ORDER BY l.id
+            SELECT l.id, l.org_id, l.name, l.city, l.address_line, l.closing_time, l.timezone
+            FROM locations l
+            WHERE l.org_id IN (SELECT org_id FROM organization_users WHERE user_id=$1)
+            ORDER BY l.id
         """, user["id"])
     return {"user": user, "organizations": [dict(x) for x in orgs], "locations": [dict(x) for x in locs]}
 
@@ -265,66 +326,84 @@ async def logout():
     resp.delete_cookie(SESSION_COOKIE, path="/")
     return resp
 
-# ===== offers (location-based) =====
+# ===== Offers (location-based) =====
 def _parse_expires_at(value: str) -> datetime:
-    if not value: raise ValueError("expires_at is empty")
+    if not value:
+        raise ValueError("expires_at is empty")
     v = value.strip()
     try:
         dt = datetime.strptime(v, "%Y-%m-%d %H:%M")
         return dt.replace(tzinfo=timezone.utc)
     except ValueError:
-        dt = datetime.fromisoformat(v.replace("Z","+00:00"))
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
 
 @app.post("/merchant/offers")
 async def create_offer(payload: Dict[str, Any] = Body(...), user = Depends(get_current_user)):
-    for r in ["title","price","stock","expires_at"]:
-        if not str(payload.get(r,"")).strip():
-            raise HTTPException(400, f"Field {r} is required")
+    for r in ["title", "price", "stock", "expires_at"]:
+        if not str(payload.get(r, "")).strip():
+            raise HTTPException(status_code=400, detail=f"Field {r} is required")
+
     async with _pool.acquire() as conn:
         loc_id = payload.get("location_id")
         if loc_id:
             own = await conn.fetchval("""
-              SELECT 1 FROM locations l WHERE l.id=$1 AND l.org_id IN
-              (SELECT org_id FROM organization_users WHERE user_id=$2)
+                SELECT 1 FROM locations l
+                WHERE l.id=$1 AND l.org_id IN (SELECT org_id FROM organization_users WHERE user_id=$2)
             """, int(loc_id), user["id"])
-            if not own: raise HTTPException(403, "No access to location")
+            if not own:
+                raise HTTPException(status_code=403, detail="No access to location")
         else:
             row = await conn.fetchrow("""
-              SELECT l.id FROM locations l
-              WHERE l.org_id IN (SELECT org_id FROM organization_users WHERE user_id=$1)
-              ORDER BY l.id LIMIT 1
+                SELECT l.id FROM locations l
+                WHERE l.org_id IN (SELECT org_id FROM organization_users WHERE user_id=$1)
+                ORDER BY l.id LIMIT 1
             """, user["id"])
-            if not row: raise HTTPException(400, "No locations found")
+            if not row:
+                raise HTTPException(status_code=400, detail="No locations found")
             loc_id = row["id"]
+
         image_url = (payload.get("image_url") or "").strip() or NO_PHOTO_URL
         expires_at_dt = _parse_expires_at(payload["expires_at"])
+
         row = await conn.fetchrow("""
-          INSERT INTO offers (location_id, title, description, price, stock, category, image_url, expires_at, status, created_at)
-          VALUES ($1,$2,$3,$4,$5,COALESCE($6,'other'),$7,$8,'active',NOW())
-          RETURNING id
-        """, int(loc_id), payload.get("title"), payload.get("description"),
-           payload.get("price"), int(payload.get("stock")), payload.get("category"),
-           image_url, expires_at_dt)
+            INSERT INTO offers (location_id, title, description, price, stock, category, image_url, expires_at, status, created_at)
+            VALUES ($1,$2,$3,$4,$5,COALESCE($6,'other'),$7,$8,'active',NOW())
+            RETURNING id
+        """,
+        int(loc_id),
+        payload.get("title"),
+        payload.get("description"),
+        payload.get("price"),
+        int(payload.get("stock")),
+        payload.get("category"),
+        image_url,
+        expires_at_dt)
+
     return {"id": row["id"]}
 
 @app.get("/public/offers")
 async def public_offers():
     async with _pool.acquire() as conn:
         rows = await conn.fetch("""
-          SELECT o.id, o.title, o.description, o.price, o.stock, o.category,
-                 o.image_url, o.expires_at, o.status,
-                 l.id AS location_id, l.name AS merchant_name, l.address_line AS address, l.city
-          FROM offers o JOIN locations l ON l.id=o.location_id
-          WHERE o.status='active' AND o.expires_at > NOW() AND o.stock > 0
-          ORDER BY o.expires_at ASC LIMIT 200
+            SELECT o.id, o.title, o.description, o.price, o.stock, o.category,
+                   o.image_url, o.expires_at, o.status,
+                   l.id AS location_id, l.name AS merchant_name, l.address_line AS address, l.city
+            FROM offers o
+            JOIN locations l ON l.id = o.location_id
+            WHERE o.status = 'active'
+              AND o.expires_at > NOW()
+              AND o.stock > 0
+            ORDER BY o.expires_at ASC
+            LIMIT 200
         """)
     return [dict(r) for r in rows]
 
-# ===== legacy aliases (совместимость со старыми формами) =====
+# ===== Legacy aliases (совместимость со старыми формами) =====
 @app.post("/api/v1/merchant/register_public")
 async def legacy_register(payload: Dict[str, Any] = Body(...)):
-    # Мэппим старые названия полей в новые
     mapped = {
         "name": payload.get("name") or payload.get("merchant_name") or "",
         "phone": payload.get("phone") or payload.get("login") or "",
@@ -338,7 +417,10 @@ async def legacy_register(payload: Dict[str, Any] = Body(...)):
 
 @app.post("/api/v1/merchant/login_public")
 async def legacy_login(payload: Dict[str, Any] = Body(...)):
-    mapped = {"phone": payload.get("phone") or payload.get("login") or "", "password": payload.get("password") or ""}
+    mapped = {
+        "phone": payload.get("phone") or payload.get("login") or "",
+        "password": payload.get("password") or ""
+    }
     return await login(mapped)
 
 @app.get("/api/v1/merchant/me")
