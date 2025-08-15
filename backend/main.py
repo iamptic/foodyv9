@@ -5,10 +5,13 @@ from datetime import datetime, timezone
 
 import asyncpg
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request, Depends
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddlewar
 from fastapi.responses import JSONResponse
 
-import bcrypt, jwt
+import bcrypt
+import jwt  # PyJWT
+if not hasattr(jwt, "encode") or not hasattr(jwt, "decode"):
+    raise RuntimeError("Wrong jwt package installed. Ensure PyJWT is in requirements and `jwt` is not.")
 import boto3
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
