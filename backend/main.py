@@ -11,10 +11,9 @@ from fastapi.responses import JSONResponse
 
 import bcrypt
 import jwt  # PyJWT
-
-# защитимся от установки неправильного пакета `jwt`
+# защита от неправильного пакета "jwt"
 if not hasattr(jwt, "encode") or not hasattr(jwt, "decode"):
-    raise RuntimeError("Wrong jwt package installed. Ensure PyJWT is in requirements and package `jwt` is NOT installed.")
+    raise RuntimeError("Wrong jwt package installed. Ensure PyJWT is in requirements and `jwt` is not.")
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -27,17 +26,14 @@ R2_ENDPOINT = os.environ.get("R2_ENDPOINT")
 R2_BUCKET = os.environ.get("R2_BUCKET")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
-
 JWT_SECRET = os.environ.get("RECOVERY_SECRET", "devsecret")
 JWT_ALG = "HS256"
 SESSION_COOKIE = "foody_session"
-
 NO_PHOTO_URL = "https://foodyweb-production.up.railway.app/img/no-photo.png"
 
 # ===== APP / CORS =====
 app = FastAPI()
 _pool: asyncpg.pool.Pool | None = None
-
 origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -47,7 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ===== Helpers =====
+# ===== helpers =====
 def _hash_pw(pw: str) -> str:
     return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -67,19 +63,19 @@ def _decode_jwt(token: str) -> Optional[dict]:
     except Exception:
         return None
 
-async def get_current_user(request: Request):
-    token = request.cookies.get(SESSION_COOKIE)
+async def get_current_user(req: Request):
+    token = req.cookies.get(SESSION_COOKIE)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     data = _decode_jwt(token)
     if not data or "sub" not in data:
         raise HTTPException(status_code=401, detail="Invalid token")
-    user_id = int(data["sub"])
+    uid = int(data["sub"])
     async with _pool.acquire() as conn:
-        user = await conn.fetchrow("SELECT id, phone, name FROM users WHERE id=$1", user_id)
-    if not user:
+        row = await conn.fetchrow("SELECT id, phone, name FROM users WHERE id=$1", uid)
+    if not row:
         raise HTTPException(status_code=401, detail="User not found")
-    return dict(user)
+    return dict(row)
 
 def _cookie_response(payload: dict, token: str) -> JSONResponse:
     resp = JSONResponse(payload)
@@ -94,7 +90,7 @@ def _cookie_response(payload: dict, token: str) -> JSONResponse:
     )
     return resp
 
-# ===== Auto-migrations (idempotent) =====
+# ===== auto-migrations (idempotent) =====
 DDL = """
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
@@ -129,7 +125,7 @@ CREATE TABLE IF NOT EXISTS locations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- для совместимости со старой схемой
+-- совместимость со старой схемой
 CREATE TABLE IF NOT EXISTS merchants (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -141,7 +137,7 @@ CREATE TABLE IF NOT EXISTS merchants (
 CREATE TABLE IF NOT EXISTS offers (
   id SERIAL PRIMARY KEY,
   merchant_id INT REFERENCES merchants(id) ON DELETE SET NULL,
-  -- колонка location_id добавляется ALTER'ом ниже (чтобы не падать на уже существующих БД)
+  -- location_id добавим через ALTER ниже, чтобы не падать на старых БД
   title TEXT NOT NULL,
   description TEXT,
   category TEXT,
@@ -158,19 +154,17 @@ CREATE INDEX IF NOT EXISTS idx_offers_status  ON offers(status);
 """
 
 ALTERS = [
-    # расширенные поля на старом merchants (не критично, но удобно)
-    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS city TEXT",
-    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS address_line TEXT",
-    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS closing_time TEXT",
-    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS timezone TEXT",
-
-    # ключевая колонка для привязки офферов к локациям
-    "ALTER TABLE offers ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id) ON DELETE CASCADE",
+    # расширим merchants на случай старых установок
+    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS city TEXT",
+    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS address_line TEXT",
+    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS closing_time TEXT",
+    "ALTER TABLE merchants  ADD COLUMN IF NOT EXISTS timezone TEXT",
+    # добавим колонку location_id, если её ещё нет
+    "ALTER TABLE offers     ADD COLUMN IF NOT EXISTS location_id INT REFERENCES locations(id) ON DELETE CASCADE",
 ]
 
-INDEXES_LATE = [
-    # создаём индекс по location_id только ПОСЛЕ добавления колонки
-    "CREATE INDEX IF NOT EXISTS idx_offers_location ON offers(location_id)",
+INDEXES_AFTER_ALTERS = [
+    "CREATE INDEX IF NOT EXISTS idx_offers_location ON offers(location_id)"
 ]
 
 @app.on_event("startup")
@@ -184,7 +178,8 @@ async def startup():
             await conn.execute(DDL)
             for sql in ALTERS:
                 await conn.execute(sql)
-            for sql in INDEXES_LATE:
+            # индекс по location_id создаём только после добавления колонки
+            for sql in INDEXES_AFTER_ALTERS:
                 await conn.execute(sql)
 
 @app.get("/health")
@@ -230,7 +225,7 @@ async def upload(file: UploadFile = File(...)):
         display_url = public_url or s3.generate_presigned_url(
             ClientMethod="get_object",
             Params={"Bucket": R2_BUCKET, "Key": key},
-            ExpiresIn=60 * 60 * 24 * 365,
+            ExpiresIn=60 * 60 * 24 * 365,  # 1 год
         )
         return {"url": public_url, "display_url": display_url, "key": key}
     except (BotoCoreError, ClientError) as e:
@@ -240,10 +235,9 @@ async def upload(file: UploadFile = File(...)):
         print("UPLOAD_ERROR:", repr(e))
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
-# ===== Auth =====
+# ===== AUTH =====
 @app.post("/auth/register")
 async def register(payload: Dict[str, Any] = Body(...)):
-    # ожидаем: name, phone, password, (опц.) city, address_line, closing_time, timezone
     for r in ["name", "phone", "password"]:
         if not str(payload.get(r, "")).strip():
             raise HTTPException(status_code=400, detail=f"Field {r} is required")
@@ -251,7 +245,6 @@ async def register(payload: Dict[str, Any] = Body(...)):
     name = payload["name"].strip()
     phone = payload["phone"].strip()
     password_hash = _hash_pw(payload["password"])
-
     city = (payload.get("city") or "").strip()
     address_line = (payload.get("address_line") or "").strip()
     closing_time = (payload.get("closing_time") or "").strip()
@@ -269,7 +262,8 @@ async def register(payload: Dict[str, Any] = Body(...)):
             )
 
             org_id = await conn.fetchval(
-                "INSERT INTO organizations (name) VALUES ($1) RETURNING id", name
+                "INSERT INTO organizations (name) VALUES ($1) RETURNING id",
+                name
             )
             await conn.execute(
                 "INSERT INTO organization_users (org_id, user_id, role) VALUES ($1,$2,'owner')",
@@ -307,16 +301,16 @@ async def login(payload: Dict[str, Any] = Body(...)):
 async def me(user = Depends(get_current_user)):
     async with _pool.acquire() as conn:
         orgs = await conn.fetch("""
-            SELECT o.id, o.name, ou.role
-            FROM organization_users ou
-            JOIN organizations o ON o.id = ou.org_id
-            WHERE ou.user_id=$1
+          SELECT o.id, o.name, ou.role
+          FROM organization_users ou
+          JOIN organizations o ON o.id = ou.org_id
+          WHERE ou.user_id=$1
         """, user["id"])
         locs = await conn.fetch("""
-            SELECT l.id, l.org_id, l.name, l.city, l.address_line, l.closing_time, l.timezone
-            FROM locations l
-            WHERE l.org_id IN (SELECT org_id FROM organization_users WHERE user_id=$1)
-            ORDER BY l.id
+          SELECT l.id, l.org_id, l.name, l.city, l.address_line, l.closing_time, l.timezone
+          FROM locations l
+          WHERE l.org_id IN (SELECT org_id FROM organization_users WHERE user_id=$1)
+          ORDER BY l.id
         """, user["id"])
     return {"user": user, "organizations": [dict(x) for x in orgs], "locations": [dict(x) for x in locs]}
 
@@ -366,11 +360,13 @@ async def create_offer(payload: Dict[str, Any] = Body(...), user = Depends(get_c
             loc_id = row["id"]
 
         image_url = (payload.get("image_url") or "").strip() or NO_PHOTO_URL
-        expires_at_dt = _parse_expires_at(payload["expires_at"])
+        expires_dt = _parse_expires_at(payload["expires_at"])
 
         row = await conn.fetchrow("""
-            INSERT INTO offers (location_id, title, description, price, stock, category, image_url, expires_at, status, created_at)
-            VALUES ($1,$2,$3,$4,$5,COALESCE($6,'other'),$7,$8,'active',NOW())
+            INSERT INTO offers
+              (location_id, title, description, price, stock, category, image_url, expires_at, status, created_at)
+            VALUES
+              ($1, $2, $3, $4, $5, COALESCE($6,'other'), $7, $8, 'active', NOW())
             RETURNING id
         """,
         int(loc_id),
@@ -380,7 +376,7 @@ async def create_offer(payload: Dict[str, Any] = Body(...), user = Depends(get_c
         int(payload.get("stock")),
         payload.get("category"),
         image_url,
-        expires_at_dt)
+        expires_dt)
 
     return {"id": row["id"]}
 
@@ -388,30 +384,39 @@ async def create_offer(payload: Dict[str, Any] = Body(...), user = Depends(get_c
 async def public_offers():
     async with _pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT o.id, o.title, o.description, o.price, o.stock, o.category,
-                   o.image_url, o.expires_at, o.status,
-                   l.id AS location_id, l.name AS merchant_name, l.address_line AS address, l.city
-            FROM offers o
-            JOIN locations l ON l.id = o.location_id
-            WHERE o.status = 'active'
-              AND o.expires_at > NOW()
-              AND o.stock > 0
-            ORDER BY o.expires_at ASC
-            LIMIT 200
+          SELECT o.id, o.title, o.description, o.price, o.stock, o.category,
+                 o.image_url, o.expires_at, o.status,
+                 l.id AS location_id, l.name AS merchant_name, l.address_line AS address, l.city
+          FROM offers o
+          JOIN locations l ON l.id = o.location_id
+          WHERE o.status = 'active'
+            AND o.expires_at > NOW()
+            AND o.stock > 0
+          ORDER BY o.expires_at ASC
+          LIMIT 200
         """)
     return [dict(r) for r in rows]
 
-# ===== Legacy aliases (совместимость со старыми формами) =====
+# ===== Legacy aliases (back-compat) =====
 @app.post("/api/v1/merchant/register_public")
 async def legacy_register(payload: Dict[str, Any] = Body(...)):
+    # старая короткая форма (name+phone). Если нет пароля — генерируем.
+    name  = (payload.get("name") or payload.get("merchant_name") or "").strip()
+    phone = (payload.get("phone") or payload.get("login") or "").strip()
+    password = (payload.get("password") or payload.get("pass") or "").strip()
+    if not password:
+        import secrets, string
+        alphabet = string.ascii_letters + string.digits
+        password = "".join(secrets.choice(alphabet) for _ in range(12))
+
     mapped = {
-        "name": payload.get("name") or payload.get("merchant_name") or "",
-        "phone": payload.get("phone") or payload.get("login") or "",
-        "password": payload.get("password") or payload.get("pass") or "",
-        "city": payload.get("city") or "",
-        "address_line": payload.get("address_line") or payload.get("address") or "",
-        "closing_time": payload.get("closing_time") or "",
-        "timezone": payload.get("timezone") or ""
+        "name": name,
+        "phone": phone,
+        "password": password,
+        "city": (payload.get("city") or "").strip(),
+        "address_line": (payload.get("address_line") or payload.get("address") or "").strip(),
+        "closing_time": (payload.get("closing_time") or "").strip(),
+        "timezone": (payload.get("timezone") or "").strip(),
     }
     return await register(mapped)
 
@@ -419,7 +424,7 @@ async def legacy_register(payload: Dict[str, Any] = Body(...)):
 async def legacy_login(payload: Dict[str, Any] = Body(...)):
     mapped = {
         "phone": payload.get("phone") or payload.get("login") or "",
-        "password": payload.get("password") or ""
+        "password": payload.get("password") or "",
     }
     return await login(mapped)
 
