@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import asyncpg
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request, Depends
-from fastapi.middleware.cors import CORSMiddlewar
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import bcrypt
