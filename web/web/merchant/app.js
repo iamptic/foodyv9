@@ -1,4 +1,4 @@
-(() => {
+(() => { console.log('[Foody] app.js loaded');
   const $ = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const on = (sel, evt, fn) => { const el = $(sel); if (el) el.addEventListener(evt, fn); };

@@ -18,7 +18,7 @@
   <!-- FOODY API fallback for new.html compatibility -->
   <script>window.foodyApi = (window.__FOODY__ && window.__FOODY__.FOODY_API) || window.foodyApi || 'https://foodyback-production.up.railway.app';</script>
   <script defer src="/config.js"></script>
-  <script defer src="./app.js"></script>
+  <script defer src="/web/merchant/app.js?v=1755273592"></script>
 </head>
 <body>
   <div class="app">
@@ -215,5 +215,40 @@
 
     <div id="toast"></div>
   </div>
+<!-- Fallback: enable tabs/gating even if app.js failed to load -->
+  <script>
+    (function(){
+      try {
+        function $$ (s, r){ return Array.from((r||document).querySelectorAll(s)); }
+        function activateTab(tab){
+          $$('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+          $$('.pane').forEach(p => p.classList.toggle('active', p.id === tab));
+        }
+        // Click delegation for top segmented tabs
+        var tabs = document.getElementById('tabs');
+        if (tabs) {
+          tabs.addEventListener('click', function(e){
+            var btn = e.target.closest && e.target.closest('.seg-btn');
+            if (!btn) return;
+            var tab = btn.getAttribute('data-tab');
+            if (tab) activateTab(tab);
+          }, { passive: true });
+        }
+        // Basic gate based on localStorage
+        var rid = localStorage.getItem('foody_restaurant_id') || '';
+        var key = localStorage.getItem('foody_key') || '';
+        if (!rid || !key) {
+          activateTab('auth');
+          if (tabs) tabs.style.display = 'none';
+          var bn = document.querySelector('.bottom-nav'); if (bn) bn.style.display = 'none';
+        } else {
+          activateTab('dashboard');
+        }
+        console.log('[Foody] Fallback tabs initialized');
+      } catch (e) {
+        console.warn('[Foody] Fallback init error', e);
+      }
+    })();
+  </script>
 </body>
 </html>
