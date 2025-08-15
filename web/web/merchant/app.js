@@ -24,6 +24,7 @@
     if (tab === 'offers') loadOffers();
     if (tab === 'profile') loadProfile();
     if (tab === 'export') updateCreds();
+    if (tab === 'create') initCreateTab();
   }
   $('#tabs').addEventListener('click', (e) => {
     const btn = e.target.closest('.seg-btn'); if (!btn) return;
@@ -131,7 +132,12 @@
 
   // OFFERS
   function moneyToCents(x){ return Math.round((Number(x)||0) * 100); }
-  function dtLocalToIso(s){ if(!s) return null; return new Date(String(s)).toISOString(); }
+  function dtLocalToIso(s){
+    if(!s) return null;
+    const str = String(s).trim().replace(' ', 'T');
+    const d = new Date(str);
+    return isNaN(d) ? null : d.toISOString();
+  }
 
   $('#offerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -142,11 +148,12 @@
       title: fd.get('title')?.trim(),
       price_cents: moneyToCents(fd.get('price')),
       original_price_cents: moneyToCents(fd.get('original_price')),
-      qty_total: Number(fd.get('qty_total')) || 1,
-      qty_left: Number(fd.get('qty_total')) || 1,
+      qty_total: Number(fd.get('qty_total') || fd.get('stock')) || 1,
+      qty_left: Number(fd.get('qty_total') || fd.get('stock')) || 1,
       expires_at: dtLocalToIso(fd.get('expires_at')),
       image_url: fd.get('image_url')?.trim() || null,
-      description: fd.get('description')?.trim() || null,
+      \1
+      category: (fd.get('category')||'').trim() || null,
     };
     try {
       await api('/api/v1/merchant/offers', { method: 'POST', body: JSON.stringify(payload) });
@@ -252,6 +259,51 @@
   });
   function updateCreds(){
     $('#creds').textContent = JSON.stringify({ restaurant_id: state.rid, api_key: state.key, api: state.api }, null, 2);
+  }
+
+  // Create tab init (Flatpickr + FilePond)
+  let createInited = false;
+  async function initCreateTab(){
+    if (createInited) return;
+    createInited = true;
+    try {
+      if (window.flatpickr && document.getElementById('expires_at')) {
+        flatpickr.localize(flatpickr.l10ns?.ru || {});
+        flatpickr("#expires_at", {
+          enableTime: true, time_24hr: true, minuteIncrement: 5,
+          dateFormat: "Y-m-d H:i",
+          defaultDate: new Date(Date.now() + 60*60*1000)
+        });
+      }
+      if (window.FilePond && document.getElementById('photo')) {
+        FilePond.registerPlugin(
+          window.FilePondPluginImagePreview,
+          window.FilePondPluginFileValidateType,
+          window.FilePondPluginFileValidateSize
+        );
+        const pond = FilePond.create(document.getElementById('photo'), {
+          allowMultiple: false,
+          acceptedFileTypes: ['image/*'],
+          maxFileSize: '5MB',
+          server: {
+            process: {
+              url: (window.foodyApi || state.api) + '/upload',
+              method: 'POST',
+              onload: (res) => {
+                try {
+                  const data = JSON.parse(res);
+                  if (data && data.url) {
+                    document.getElementById('image_url').value = data.url;
+                    return data.url;
+                  }
+                } catch (e) {}
+                return null;
+              }
+            }
+          }
+        });
+      }
+    } catch (err) { console.warn('Create init failed', err); }
   }
 
   // Init
