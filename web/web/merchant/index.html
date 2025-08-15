@@ -135,6 +135,13 @@
             </label>
             <label class="full">Истекает
               <input id="expires_at" name="expires_at" placeholder="Выберите дату и время" required>
+              <div id="quickTime" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <button type="button" class="btn-ghost" data-mins="30">+30 мин</button>
+                <button type="button" class="btn-ghost" data-mins="60">+1 час</button>
+                <button type="button" class="btn-ghost" data-mins="120">+2 часа</button>
+                <button type="button" class="btn-ghost" data-eod="21:00">Сегодня 21:00</button>
+              </div>
+              <div class="hint">Быстрый выбор: 30–120 минут или «Сегодня 21:00».</div>
               <div class="hint">Таймер скидок привязан к этой точке.</div>
             </label>
             <label class="full">Категория

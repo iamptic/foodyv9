@@ -270,12 +270,36 @@
     try {
       if (window.flatpickr && document.getElementById('expires_at')) {
         flatpickr.localize(flatpickr.l10ns?.ru || {});
-        flatpickr("#expires_at", {
+        const expiresPicker = flatpickr("#expires_at", {
           enableTime: true, time_24hr: true, minuteIncrement: 5,
           dateFormat: "Y-m-d H:i",
-          defaultDate: new Date(Date.now() + 60*60*1000)
+          altInput: true, altFormat: "d.m.Y H:i",
+          defaultDate: new Date(Date.now() + 60*60*1000),
+          minDate: "today"
         });
-      }
+        window._foodyExpiresPicker = expiresPicker;
+        // Quick time buttons
+        const qt = document.getElementById('quickTime');
+        if (qt && expiresPicker) {
+          qt.addEventListener('click', (e) => {
+            const btn = e.target.closest('button'); if (!btn) return;
+            const mins = btn.getAttribute('data-mins');
+            const eod = btn.getAttribute('data-eod'); // format "HH:MM"
+            let target = null;
+            if (mins) {
+              const add = parseInt(mins, 10) || 0;
+              target = new Date(Date.now() + add*60*1000);
+            } else if (eod) {
+              const [hh, mm] = eod.split(':').map(x=>parseInt(x,10)||0);
+              const d = new Date();
+              d.setHours(hh, mm, 0, 0);
+              if (d < new Date()) d.setDate(d.getDate()+1); // если время прошло — на завтра
+              target = d;
+            }
+            if (target) expiresPicker.setDate(target, true);
+          }, { passive: true });
+        }
+        }
       if (window.FilePond && document.getElementById('photo')) {
         FilePond.registerPlugin(
           window.FilePondPluginImagePreview,
@@ -284,6 +308,9 @@
         );
         const pond = FilePond.create(document.getElementById('photo'), {
           allowMultiple: false,
+          labelIdle: 'Перетащите фото или <span class="filepond--label-action">выберите</span>',
+          acceptedFileTypes: ['image/*'],
+          maxFileSize: '5MB',
           acceptedFileTypes: ['image/*'],
           maxFileSize: '5MB',
           server: {
