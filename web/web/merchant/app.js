@@ -1,6 +1,7 @@
 (() => {
   const $ = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+  const on = (sel, evt, fn) => { const el = $(sel); if (el) el.addEventListener(evt, fn); };
   const state = {
     api: (window.__FOODY__ && window.__FOODY__.FOODY_API) || "https://foodyback-production.up.railway.app",
     rid: localStorage.getItem('foody_restaurant_id') || '',
@@ -26,11 +27,11 @@
     if (tab === 'export') updateCreds();
     if (tab === 'create') initCreateTab();
   }
-  $('#tabs').addEventListener('click', (e) => {
+  on('#tabs','click', (e) => {
     const btn = e.target.closest('.seg-btn'); if (!btn) return;
     if (btn.dataset.tab) activateTab(btn.dataset.tab);
   });
-  $('.bottom-nav').addEventListener('click', (e) => {
+  on('.bottom-nav','click', (e) => {
     const btn = e.target.closest('.nav-btn'); if (!btn) return;
     if (btn.dataset.tab) activateTab(btn.dataset.tab);
   });
@@ -72,7 +73,7 @@
   }
 
   // AUTH
-  $('#registerForm').addEventListener('submit', async (e) => {
+  on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const payload = { name: fd.get('name')?.trim(), phone: fd.get('phone')?.trim() };
@@ -86,7 +87,7 @@
       gate();
     } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
   });
-  $('#loginForm').addEventListener('submit', (e) => {
+  on('#loginForm','submit', (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     state.rid = fd.get('restaurant_id')?.trim();
@@ -110,7 +111,7 @@
       $('#profileDump').textContent = JSON.stringify(p, null, 2);
     } catch (err) { console.warn(err); showToast('Не удалось загрузить профиль: ' + err.message); }
   }
-  $('#profileForm').addEventListener('submit', async (e) => {
+  on('#profileForm','submit', async (e) => {
     e.preventDefault();
     if (!state.rid || !state.key) return showToast('Сначала войдите');
     const fd = new FormData(e.currentTarget);
@@ -139,7 +140,7 @@
     return isNaN(d) ? null : d.toISOString();
   }
 
-  $('#offerForm').addEventListener('submit', async (e) => {
+  on('#offerForm','submit', async (e) => {
     e.preventDefault();
     if (!state.rid || !state.key) return showToast('Сначала войдите');
     const fd = new FormData(e.currentTarget);
@@ -242,7 +243,7 @@
   }
 
   // EXPORT
-  $('#downloadCsv').addEventListener('click', async () => {
+  on('#downloadCsv','click', async () => {
     if (!state.rid || !state.key) return showToast('Сначала войдите');
     try {
       const res = await fetch(`${state.api}/api/v1/merchant/offers/csv?restaurant_id=${encodeURIComponent(state.rid)}`, {
