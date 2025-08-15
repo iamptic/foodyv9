@@ -27,13 +27,10 @@
         var qs = new URLSearchParams(location.search);
         if (qs.get('logout') === '1') {
           try {
-            Object.keys(localStorage).forEach(function(k){
-              if(/^foody_/i.test(k)) localStorage.removeItem(k);
-            });
-          } catch (e) {}
+            Object.keys(localStorage).forEach(function(k){ if(/^foody_/i.test(k)) localStorage.removeItem(k); });
+          } catch(e){}
           try { history.replaceState(null,'', location.pathname); } catch(e){}
-          location.reload();
-          return;
+          location.reload(); return;
         }
         var rid = localStorage.getItem('foody_restaurant_id') || '';
         var key = localStorage.getItem('foody_key') || '';
@@ -48,13 +45,13 @@
           try {
             document.querySelectorAll('.pane').forEach(function(p){ p.classList.remove('active'); });
             var auth = document.getElementById('auth'); if (auth) auth.classList.add('active');
-          } catch (_) {}
+          } catch(_){}
         } else {
           if (tabs) tabs.style.display = '';
           if (bn) bn.style.display = '';
           if (lo) lo.style.display = '';
         }
-      } catch (e) {}
+      } catch(e){}
     })();
   </script>
 </head>

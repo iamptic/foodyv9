@@ -178,8 +178,7 @@
       qty_left: Number(fd.get('qty_total') || fd.get('stock')) || 1,
       expires_at: dtLocalToIso(fd.get('expires_at')),
       image_url: fd.get('image_url')?.trim() || null,
-      \1
-      category: (fd.get('category')||'').trim() || null,
+category: (fd.get('category')||'').trim() || null,
     };
     try {
       await api('/api/v1/merchant/offers', { method: 'POST', body: JSON.stringify(payload) });
@@ -370,11 +369,8 @@
         } catch(e) { console.warn('FilePond plugins', e); }
         const pond = FilePond.create(document.getElementById('photo'), {
           credits: false,
-          credits: false,
           allowMultiple: false,
           labelIdle: 'Перетащите фото или <span class="filepond--label-action">выберите</span>',
-          acceptedFileTypes: ['image/*'],
-          maxFileSize: '5MB',
           acceptedFileTypes: ['image/*'],
           maxFileSize: '5MB',
           server: {
@@ -388,13 +384,13 @@
                     document.getElementById('image_url').value = data.url;
                     return data.url;
                   }
-                } catch (e) {}
+                } catch (e) { console.warn('upload parse error', e); }
                 return null;
               }
             }
           }
         });
-      }
+}
       // ensure preview for plain input as fallback
       bindPhotoPreview();
     } catch (err) { console.warn('Create init failed', err); }
