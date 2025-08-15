@@ -89,7 +89,11 @@
       localStorage.removeItem('foody_key');
       state.rid = ''; state.key = '';
       showToast('Вы вышли');
-      if (reload) { location.search = ''; location.hash = ''; location.reload(); return; }
+      // always route through ?logout=1 so inline hard-logout runs even if app.js is cached/broken
+      location.search = '?logout=1';
+      return;
+      // fallback (should not be hit normally)
+      if (reload) { location.search = ''; location.hash=''; location.reload(); return; }
       gate();
     } catch (e) { console.warn('logout failed', e); }
   }

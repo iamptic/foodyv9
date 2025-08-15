@@ -17,6 +17,30 @@
   <script defer src="https://unpkg.com/filepond@^4/dist/filepond.min.js"></script>
   <!-- FOODY API fallback for new.html compatibility -->
   <script>window.foodyApi = (window.__FOODY__ && window.__FOODY__.FOODY_API) || window.foodyApi || 'https://foodyback-production.up.railway.app';</script>
+
+  <!-- FOODY HARD LOGOUT (runs before app.js) -->
+  <script>
+    (function(){
+      try {
+        var qs = new URLSearchParams(location.search);
+        if (qs.get('logout') === '1') {
+          try {
+            // remove keys used by app
+            localStorage.removeItem('foody_restaurant_id');
+            localStorage.removeItem('foody_key');
+            // clean any other foody_* keys just in case
+            Object.keys(localStorage).forEach(function(k){
+              if(/^foody_/i.test(k)) localStorage.removeItem(k);
+            });
+          } catch (e) {}
+          // drop query and reload to a clean URL
+          var clean = (location.origin || '') + '/web/merchant/';
+          if (clean) history.replaceState(null,'', clean);
+          location.reload();
+        }
+      } catch (e) {}
+    })();
+  </script>
   <script defer src="/config.js"></script>
   <script defer src="/web/merchant/app.js?v=1755273592"></script>
   <script defer src="./create.enhance.js"></script>
@@ -175,6 +199,9 @@
       <section class="pane" id="profile">
         <div class="card">
           <div class="card-title">Профиль ресторана</div>
+          <div style="text-align:right;margin:6px 0 0 0;">
+            <a href="?logout=1" data-hard-logout class="btn btn-ghost" title="Выйти">Выйти</a>
+          </div>
           <div style="text-align:right;margin-bottom:6px;">
             <button id="logout" class="btn btn-ghost" title="Выйти">Выйти</button>
           </div>
