@@ -70,38 +70,53 @@
 
     <main class="content">
       <!-- AUTH -->
-      <section class="pane" id="auth">
-        <div class="card card-glass">
+      <section class="pane" id="auth">        <div class="card card-glass">
           <div class="card-title">Быстрый старт</div>
-          <div class="grid two">
-            <div class="card">
-              <div class="card-subtitle">1) Создать ресторан</div>
-              <form id="registerForm" class="form">
-                <label>Название
-                  <input name="name" placeholder="Кафе Плюс" required>
-                </label>
-                <label>Телефон
-                  <input name="phone" placeholder="+7 900 123-45-67" required>
-                </label>
-                <button class="btn btn-primary">Создать</button>
-              </form>
-            </div>
-            <div class="card">
-              <div class="card-subtitle">2) Войти по данным</div>
-              <form id="loginForm" class="form">
-                <label>Restaurant ID
-                  <input name="restaurant_id" placeholder="RID_..." required>
-                </label>
-                <label>API Key
-                  <input name="api_key" placeholder="KEY_..." required>
-                </label>
-                <button class="btn btn-primary">Войти</button>
-              </form>
+
+          <nav class="segmented small" id="authTabs" style="margin-bottom:10px;">
+            <button class="seg-btn active" data-auth="register">Регистрация</button>
+            <button class="seg-btn" data-auth="login">Вход</button>
+          </nav>
+
+          <div id="authForms" class="grid two">
+            <form id="registerForm" class="form">
+              <label>Название
+                <input name="name" placeholder="Кафе Плюс" required>
+              </label>
+              <label>Телефон
+                <input name="phone" placeholder="+7 900 000-00-00">
+              </label>
+              <button class="btn btn-primary">Создать ресторан</button>
+              <div class="hint">Мы выдадим <b>Restaurant ID</b> и <b>API key</b> — сохраните их.</div>
+            </form>
+
+            <form id="loginForm" class="form hidden">
+              <label>Restaurant ID
+                <input name="restaurant_id" placeholder="xxxxxxxx" required>
+              </label>
+              <label>API key
+                <input name="api_key" placeholder="xxxxxxxx" required>
+              </label>
+              <button class="btn">Войти</button>
+              <div class="hint">Нет аккаунта? Переключитесь на «Регистрация».</div>
+            </form>
+          </div>
+
+          <div id="regDone" class="card hidden" style="margin-top:12px;">
+            <div class="card-title">Готово! Ключи для входа</div>
+            <div class="grid two">
+              <div class="dump small">
+                <div><b>Restaurant ID:</b> <span id="credRid">—</span></div>
+                <div><b>API key:</b> <span id="credKey">—</span></div>
+              </div>
+              <div class="grid">
+                <button id="copyCreds" class="btn btn-primary">Скопировать</button>
+                <button id="downloadCreds" class="btn">Скачать .txt</button>
+                <button id="goCreate" class="btn btn-ghost">Перейти к созданию оффера</button>
+              </div>
             </div>
           </div>
-          <div class="hint">После регистрации вы получите <b>Restaurant ID</b> и <b>API Key</b>. Данные сохраняются в браузере.</div>
-        </div>
-      </section>
+        </div></section>
 
       <!-- DASHBOARD -->
       <section class="pane active" id="dashboard">

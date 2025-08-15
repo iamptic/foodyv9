@@ -114,14 +114,67 @@
     return ct.includes('application/json') ? res.json() : res.text();
   }
 
-  // AUTH
+  
+  // ---- Auth tabs toggle & registration UX ----
+  function setAuthMode(mode){
+    const tabs = $$('#authTabs .seg-btn');
+    tabs.forEach(b => b.classList.toggle('active', b.dataset.auth === mode));
+    $('#registerForm')?.classList.toggle('hidden', mode !== 'register');
+    $('#loginForm')?.classList.toggle('hidden', mode !== 'login');
+  }
+  on('#authTabs', 'click', (e) => {
+    const btn = e.target.closest('.seg-btn'); if (!btn) return;
+    const mode = btn.dataset.auth; if (!mode) return;
+    setAuthMode(mode);
+  });
+
+  // Prefill from URL
+  try {
+    const sp = new URLSearchParams(location.search);
+    const name = sp.get('name') || sp.get('title');
+    const phone = sp.get('phone');
+    if (name) { const i=$('#registerForm input[name="name"]'); if(i) i.value = name; }
+    if (phone){ const i=$('#registerForm input[name="phone"]'); if(i) i.value = phone; }
+  } catch(_) {}
+
+  function showRegDone(r){
+    try {
+      $('#credRid').textContent = r.restaurant_id || '—';
+      $('#credKey').textContent = r.api_key || '—';
+      $('#regDone')?.classList.remove('hidden');
+      setAuthMode('login');
+    } catch(_) {}
+  }
+
+  on('#copyCreds','click', async (e) => {
+    e.preventDefault();
+    const txt = `restaurant_id=${$('#credRid')?.textContent}\napi_key=${$('#credKey')?.textContent}`;
+    try { await navigator.clipboard.writeText(txt); showToast('Скопировано ✅'); } catch { showToast('Не удалось скопировать'); }
+  });
+  on('#downloadCreds','click', (e) => {
+    e.preventDefault();
+    const txt = `restaurant_id=${$('#credRid')?.textContent}\napi_key=${$('#credKey')?.textContent}\n`;
+    const blob = new Blob([txt], {type:'text/plain'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'foody_keys.txt'; a.click(); URL.revokeObjectURL(a.href);
+  });
+  on('#goCreate','click', (e) => {
+    e.preventDefault();
+    activateTab('create');
+  });
+
+// AUTH
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const payload = { name: fd.get('name')?.trim(), phone: fd.get('phone')?.trim() };
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
-      if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
+      if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API'); 
+      localStorage.setItem('foody_restaurant_id', r.restaurant_id);
+      localStorage.setItem('foody_key', r.api_key);
+      state.rid = r.restaurant_id; state.key = r.api_key;
+      showToast('Ресторан создан ✅'); 
+      showRegDone(r);
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
