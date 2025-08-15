@@ -169,12 +169,19 @@
     const payload = { name: fd.get('name')?.trim(), phone: fd.get('phone')?.trim() };
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
-      if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API'); 
+      if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
+      // Save creds
       localStorage.setItem('foody_restaurant_id', r.restaurant_id);
       localStorage.setItem('foody_key', r.api_key);
       state.rid = r.restaurant_id; state.key = r.api_key;
-      showToast('Ресторан создан ✅'); 
-      showRegDone(r);
+      showToast('Ресторан создан ✅');
+      // Auto-login & go to Create
+      try { gate(); } catch(_) {}
+      try { activateTab && activateTab('create'); } catch(_) {}
+      try { initCreateTab && initCreateTab(); } catch(_) {}
+      // Optionally still show keys inside Export later
+      try { updateCreds && updateCreds(); } catch(_) {}
+
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
