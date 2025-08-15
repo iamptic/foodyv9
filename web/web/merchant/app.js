@@ -355,8 +355,12 @@
           }
         });
       }
-      if (window.FilePond && document.getElementById('photo')) {
+      const _inp = document.getElementById('photo');
+      if (window.FilePond && _inp && !_inp._pond) {
         try {
+          if (!window.__FOODY_POND_PLUGINS__) {
+            window.__FOODY_POND_PLUGINS__ = true;
+          }
           const plugs = [];
           if (window.FilePondPluginImagePreview) plugs.push(window.FilePondPluginImagePreview);
           if (window.FilePondPluginFileValidateType) plugs.push(window.FilePondPluginFileValidateType);

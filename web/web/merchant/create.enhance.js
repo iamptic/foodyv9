@@ -43,7 +43,7 @@
 
   let inited = false;
   function initCreateTab(){
-    try {
+    try { if (!window.__FOODY_POND_PLUGINS__) { window.__FOODY_POND_PLUGINS__ = true; }
       if (inited) { bindNativePreview(); return; }
       inited = true;
 
@@ -74,8 +74,8 @@
 
       bindNativePreview();
       const fileInput = $('#photo');
-      if (window.FilePond && fileInput) {
-        try {
+      if (window.FilePond && fileInput && !fileInput._pond && !window.__FOODY_POND_INIT__) { window.__FOODY_POND_INIT__ = true;
+        try { if (!window.__FOODY_POND_PLUGINS__) { window.__FOODY_POND_PLUGINS__ = true; }
           if (window.FilePondPluginImagePreview) FilePond.registerPlugin(window.FilePondPluginImagePreview);
           if (window.FilePondPluginFileValidateType) FilePond.registerPlugin(window.FilePondPluginFileValidateType);
           if (window.FilePondPluginFileValidateSize) FilePond.registerPlugin(window.FilePondPluginFileValidateSize);
