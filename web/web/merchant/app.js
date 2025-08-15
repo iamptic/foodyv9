@@ -63,8 +63,8 @@
   // Auth gating: if no creds — show AUTH pane only
   function gate() {
     const lo = $('#logoutBtn');
-    if (!state.rid || !state.key) { if (lo) lo.style.display='none';
-      activateTab('auth');
+    if (!state.rid || !state.key) {
+      activateTab('auth'); if (lo) lo.style.display='none';
       $('#tabs').style.display = 'none';
       $('.bottom-nav').style.display = 'none';
       return false;
@@ -83,21 +83,38 @@
   });
 
   // API helper
+  // API helper (with smart fallbacks for API prefixes)
   async function api(path, { method='GET', headers={}, body=null, raw=false } = {}) {
-    const url = `${state.api}${path}`;
     const h = { 'Content-Type': 'application/json', ...headers };
     if (state.key) h['X-Foody-Key'] = state.key;
-    const res = await fetch(url, { method, headers: h, body });
-    if (!res.ok) {
-      const txt = await res.text().catch(()=>'');
-      throw new Error(`${res.status} ${res.statusText} — ${txt}`);
+    const variants = [];
+    variants.push(path);
+    if (path.startsWith('/api/v1/merchant/')) {
+      variants.push(path.replace('/api/v1/merchant/', '/api/v1/'));
+      variants.push(path.replace('/api/v1/merchant/', '/api/'));
+    } else if (path.startsWith('/api/v1/')) {
+      variants.push(path.replace('/api/v1/', '/api/'));
     }
-    if (raw) return res;
-    const ct = res.headers.get('content-type') || '';
-    return ct.includes('application/json') ? res.json() : res.text();
-  }
-
-  // AUTH
+    let lastErr = null;
+    for (const p of variants) {
+      try {
+        const url = `${state.api}${p}`;
+        const res = await fetch(url, { method, headers: h, body });
+        if (res.status === 404) { lastErr = new Error(`404 Not Found (${p})`); continue; }
+        if (!res.ok) {
+          const txt = await res.text().catch(()=>'');
+          throw new Error(`${res.status} ${res.statusText} — ${txt}`);
+        }
+        if (raw) return res;
+        const ct = res.headers.get('content-type') || '';
+        return ct.includes('application/json') ? res.json() : res.text();
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('API request failed');
+  }// AUTH
+  
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -105,6 +122,16 @@
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
       if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
+      state.rid = r.restaurant_id; state.key = r.api_key;
+      localStorage.setItem('foody_restaurant_id', state.rid);
+      localStorage.setItem('foody_key', state.key);
+      showToast('Ресторан создан ✅');
+      gate();
+      try { activateTab('create'); } catch(_) {}
+      try { initCreateTab(); } catch(_) {}
+    } catch (err) { console.error(err); showToast('Ошибка регистрации: ' + err.message); }
+  });
+if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
@@ -178,7 +205,8 @@
       qty_left: Number(fd.get('qty_total') || fd.get('stock')) || 1,
       expires_at: dtLocalToIso(fd.get('expires_at')),
       image_url: fd.get('image_url')?.trim() || null,
-category: (fd.get('category')||'').trim() || null,
+      
+      category: (fd.get('category')||'').trim() || null,
     };
     try {
       await api('/api/v1/merchant/offers', { method: 'POST', body: JSON.stringify(payload) });
@@ -369,8 +397,11 @@ category: (fd.get('category')||'').trim() || null,
         } catch(e) { console.warn('FilePond plugins', e); }
         const pond = FilePond.create(document.getElementById('photo'), {
           credits: false,
+          credits: false,
           allowMultiple: false,
           labelIdle: 'Перетащите фото или <span class="filepond--label-action">выберите</span>',
+          acceptedFileTypes: ['image/*'],
+          maxFileSize: '5MB',
           acceptedFileTypes: ['image/*'],
           maxFileSize: '5MB',
           server: {
@@ -384,13 +415,13 @@ category: (fd.get('category')||'').trim() || null,
                     document.getElementById('image_url').value = data.url;
                     return data.url;
                   }
-                } catch (e) { console.warn('upload parse error', e); }
+                } catch (e) {}
                 return null;
               }
             }
           }
         });
-}
+      }
       // ensure preview for plain input as fallback
       bindPhotoPreview();
     } catch (err) { console.warn('Create init failed', err); }
