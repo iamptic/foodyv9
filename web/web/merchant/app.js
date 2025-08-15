@@ -1,6 +1,30 @@
 (() => { console.log('[Foody] app.js loaded');
   const $ = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+  function bindPhotoPreview(){
+    try {
+      const el = document.getElementById('photo');
+      if (!el || el._previewBound) return;
+      el._previewBound = true;
+      el.addEventListener('change', () => {
+        // If FilePond fully applied, it handles previews
+        if (document.querySelector('.filepond--root')) return;
+        const f = el.files && el.files[0];
+        const wrap = document.getElementById('photoPreviewWrap');
+        const img = document.getElementById('photoPreview');
+        if (!wrap || !img) return;
+        if (f) {
+          const url = URL.createObjectURL(f);
+          img.src = url;
+          wrap.classList.remove('hidden');
+          img.onload = () => URL.revokeObjectURL(url);
+        } else {
+          wrap.classList.add('hidden');
+          img.removeAttribute('src');
+        }
+      });
+    } catch (e) { console.warn('bindPhotoPreview failed', e); }
+  }
   const on = (sel, evt, fn) => { const el = $(sel); if (el) el.addEventListener(evt, fn); };
   const state = {
     api: (window.__FOODY__ && window.__FOODY__.FOODY_API) || "https://foodyback-production.up.railway.app",
@@ -332,11 +356,13 @@
         });
       }
       if (window.FilePond && document.getElementById('photo')) {
-        FilePond.registerPlugin(
-          window.FilePondPluginImagePreview,
-          window.FilePondPluginFileValidateType,
-          window.FilePondPluginFileValidateSize
-        );
+        try {
+          const plugs = [];
+          if (window.FilePondPluginImagePreview) plugs.push(window.FilePondPluginImagePreview);
+          if (window.FilePondPluginFileValidateType) plugs.push(window.FilePondPluginFileValidateType);
+          if (window.FilePondPluginFileValidateSize) plugs.push(window.FilePondPluginFileValidateSize);
+          if (plugs.length) FilePond.registerPlugin(...plugs);
+        } catch(e) { console.warn('FilePond plugins', e); }
         const pond = FilePond.create(document.getElementById('photo'), {
           allowMultiple: false,
           labelIdle: 'Перетащите фото или <span class="filepond--label-action">выберите</span>',
@@ -362,6 +388,8 @@
           }
         });
       }
+      // ensure preview for plain input as fallback
+      bindPhotoPreview();
     } catch (err) { console.warn('Create init failed', err); }
   }
 
@@ -373,6 +401,9 @@
     }
   } catch (_) {}
   
+  // Early preview binding
+  bindPhotoPreview();
+
   // Init
   gate();
 })();
