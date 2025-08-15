@@ -17,30 +17,6 @@
   <script defer src="https://unpkg.com/filepond@^4/dist/filepond.min.js"></script>
   <!-- FOODY API fallback for new.html compatibility -->
   <script>window.foodyApi = (window.__FOODY__ && window.__FOODY__.FOODY_API) || window.foodyApi || 'https://foodyback-production.up.railway.app';</script>
-
-  <!-- FOODY HARD LOGOUT (runs before app.js) -->
-  <script>
-    (function(){
-      try {
-        var qs = new URLSearchParams(location.search);
-        if (qs.get('logout') === '1') {
-          try {
-            // remove keys used by app
-            localStorage.removeItem('foody_restaurant_id');
-            localStorage.removeItem('foody_key');
-            // clean any other foody_* keys just in case
-            Object.keys(localStorage).forEach(function(k){
-              if(/^foody_/i.test(k)) localStorage.removeItem(k);
-            });
-          } catch (e) {}
-          // drop query and reload to a clean URL
-          var clean = (location.origin || '') + '/web/merchant/';
-          if (clean) history.replaceState(null,'', clean);
-          location.reload();
-        }
-      } catch (e) {}
-    })();
-  </script>
   <script defer src="/config.js"></script>
   <script defer src="/web/merchant/app.js?v=1755273592"></script>
   <script defer src="./create.enhance.js"></script>
@@ -56,7 +32,7 @@
         </div>
       </div>
       <div class="tg-header__right">
-        <button id="logoutBtn" class="btn btn-ghost">Выйти</button>
+        <button id="logoutBtn" class="btn btn-ghost hidden">Выйти</button>
       </div>
     </header>
 
@@ -70,53 +46,40 @@
 
     <main class="content">
       <!-- AUTH -->
-      <section class="pane" id="auth">        <div class="card card-glass">
+            <section class="pane" id="auth">
+        <div class="card card-glass">
           <div class="card-title">Быстрый старт</div>
 
-          <nav class="segmented small" id="authTabs" style="margin-bottom:10px;">
+          <nav class="segmented small" id="authTabs" style="margin-bottom:10px;max-width:520px;">
             <button class="seg-btn active" data-auth="register">Регистрация</button>
             <button class="seg-btn" data-auth="login">Вход</button>
           </nav>
 
-          <div id="authForms" class="grid two">
+          <div id="authForms" class="grid two" style="grid-template-columns: 1fr;">
             <form id="registerForm" class="form">
               <label>Название
                 <input name="name" placeholder="Кафе Плюс" required>
               </label>
               <label>Телефон
-                <input name="phone" placeholder="+7 900 000-00-00">
+                <input name="phone" placeholder="+7 900 123-45-67">
               </label>
               <button class="btn btn-primary">Создать ресторан</button>
-              <div class="hint">Мы выдадим <b>Restaurant ID</b> и <b>API key</b> — сохраните их.</div>
+              <div class="hint">Сразу после регистрации вы попадёте на «Создать оффер».</div>
             </form>
 
             <form id="loginForm" class="form hidden">
               <label>Restaurant ID
-                <input name="restaurant_id" placeholder="xxxxxxxx" required>
+                <input name="restaurant_id" placeholder="RID_..." required>
               </label>
-              <label>API key
-                <input name="api_key" placeholder="xxxxxxxx" required>
+              <label>API Key
+                <input name="api_key" placeholder="KEY_..." required>
               </label>
-              <button class="btn">Войти</button>
+              <button class="btn btn-primary">Войти</button>
               <div class="hint">Нет аккаунта? Переключитесь на «Регистрация».</div>
             </form>
           </div>
-
-          <div id="regDone" class="card hidden" style="margin-top:12px;">
-            <div class="card-title">Готово! Ключи для входа</div>
-            <div class="grid two">
-              <div class="dump small">
-                <div><b>Restaurant ID:</b> <span id="credRid">—</span></div>
-                <div><b>API key:</b> <span id="credKey">—</span></div>
-              </div>
-              <div class="grid">
-                <button id="copyCreds" class="btn btn-primary">Скопировать</button>
-                <button id="downloadCreds" class="btn">Скачать .txt</button>
-                <button id="goCreate" class="btn btn-ghost">Перейти к созданию оффера</button>
-              </div>
-            </div>
-          </div>
-        </div></section>
+        </div>
+      </section>
 
       <!-- DASHBOARD -->
       <section class="pane active" id="dashboard">
@@ -214,12 +177,6 @@
       <section class="pane" id="profile">
         <div class="card">
           <div class="card-title">Профиль ресторана</div>
-          <div style="text-align:right;margin:6px 0 0 0;">
-            <a href="?logout=1" data-hard-logout class="btn btn-ghost" title="Выйти">Выйти</a>
-          </div>
-          <div style="text-align:right;margin-bottom:6px;">
-            <button id="logout" class="btn btn-ghost" title="Выйти">Выйти</button>
-          </div>
           <form id="profileForm" class="form grid two">
             <label>Название
               <input name="name">
@@ -294,11 +251,11 @@
         // Basic gate based on localStorage
         var rid = localStorage.getItem('foody_restaurant_id') || '';
         var key = localStorage.getItem('foody_key') || '';
-        if (!rid || !key) {
+        if (!rid || !key) { var lo=document.getElementById('logoutBtn'); if(lo) lo.style.display='none';
           activateTab('auth');
           if (tabs) tabs.style.display = 'none';
           var bn = document.querySelector('.bottom-nav'); if (bn) bn.style.display = 'none';
-        } else {
+        } else { var lo=document.getElementById('logoutBtn'); if(lo) lo.style.display='';
           activateTab('dashboard');
         }
         console.log('[Foody] Fallback tabs initialized');

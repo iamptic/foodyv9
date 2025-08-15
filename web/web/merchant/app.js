@@ -82,24 +82,6 @@
   });
 
   // API helper
-        
-  function doLogout(reload=false){
-    try {
-      localStorage.removeItem('foody_restaurant_id');
-      localStorage.removeItem('foody_key');
-      state.rid = ''; state.key = '';
-      showToast('Вы вышли');
-      // always route through ?logout=1 so inline hard-logout runs even if app.js is cached/broken
-      location.search = '?logout=1';
-      return;
-      // fallback (should not be hit normally)
-      if (reload) { location.search = ''; location.hash=''; location.reload(); return; }
-      gate();
-    } catch (e) { console.warn('logout failed', e); }
-  }
-  window.foodyLogout = doLogout;
-  
-  // API helper
   async function api(path, { method='GET', headers={}, body=null, raw=false } = {}) {
     const url = `${state.api}${path}`;
     const h = { 'Content-Type': 'application/json', ...headers };
@@ -128,40 +110,6 @@
     setAuthMode(mode);
   });
 
-  // Prefill from URL
-  try {
-    const sp = new URLSearchParams(location.search);
-    const name = sp.get('name') || sp.get('title');
-    const phone = sp.get('phone');
-    if (name) { const i=$('#registerForm input[name="name"]'); if(i) i.value = name; }
-    if (phone){ const i=$('#registerForm input[name="phone"]'); if(i) i.value = phone; }
-  } catch(_) {}
-
-  function showRegDone(r){
-    try {
-      $('#credRid').textContent = r.restaurant_id || '—';
-      $('#credKey').textContent = r.api_key || '—';
-      $('#regDone')?.classList.remove('hidden');
-      setAuthMode('login');
-    } catch(_) {}
-  }
-
-  on('#copyCreds','click', async (e) => {
-    e.preventDefault();
-    const txt = `restaurant_id=${$('#credRid')?.textContent}\napi_key=${$('#credKey')?.textContent}`;
-    try { await navigator.clipboard.writeText(txt); showToast('Скопировано ✅'); } catch { showToast('Не удалось скопировать'); }
-  });
-  on('#downloadCreds','click', (e) => {
-    e.preventDefault();
-    const txt = `restaurant_id=${$('#credRid')?.textContent}\napi_key=${$('#credKey')?.textContent}\n`;
-    const blob = new Blob([txt], {type:'text/plain'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'foody_keys.txt'; a.click(); URL.revokeObjectURL(a.href);
-  });
-  on('#goCreate','click', (e) => {
-    e.preventDefault();
-    activateTab('create');
-  });
-
 // AUTH
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
@@ -170,18 +118,6 @@
     try {
       const r = await api('/api/v1/merchant/register_public', { method: 'POST', body: JSON.stringify(payload) });
       if (!r.restaurant_id || !r.api_key) throw new Error('Неожиданный ответ API');
-      // Save creds
-      localStorage.setItem('foody_restaurant_id', r.restaurant_id);
-      localStorage.setItem('foody_key', r.api_key);
-      state.rid = r.restaurant_id; state.key = r.api_key;
-      showToast('Ресторан создан ✅');
-      // Auto-login & go to Create
-      try { gate(); } catch(_) {}
-      try { activateTab && activateTab('create'); } catch(_) {}
-      try { initCreateTab && initCreateTab(); } catch(_) {}
-      // Optionally still show keys inside Export later
-      try { updateCreds && updateCreds(); } catch(_) {}
-
       state.rid = r.restaurant_id; state.key = r.api_key;
       localStorage.setItem('foody_restaurant_id', state.rid);
       localStorage.setItem('foody_key', state.key);
@@ -255,7 +191,7 @@
       qty_left: Number(fd.get('qty_total') || fd.get('stock')) || 1,
       expires_at: dtLocalToIso(fd.get('expires_at')),
       image_url: fd.get('image_url')?.trim() || null,
-      \1
+      
       category: (fd.get('category')||'').trim() || null,
     };
     try {
@@ -447,11 +383,8 @@
         } catch(e) { console.warn('FilePond plugins', e); }
         const pond = FilePond.create(document.getElementById('photo'), {
           credits: false,
-          credits: false,
           allowMultiple: false,
           labelIdle: 'Перетащите фото или <span class="filepond--label-action">выберите</span>',
-          acceptedFileTypes: ['image/*'],
-          maxFileSize: '5MB',
           acceptedFileTypes: ['image/*'],
           maxFileSize: '5MB',
           server: {
@@ -471,7 +404,7 @@
             }
           }
         });
-      }
+}
       // ensure preview for plain input as fallback
       bindPhotoPreview();
     } catch (err) { console.warn('Create init failed', err); }
@@ -491,17 +424,3 @@
   // Init
   gate();
 })();
-
-  // Global delegation for logout (handles #logout or [data-action="logout"])
-  function foodyDocClickLogout(e){
-    const t = e.target.closest && e.target.closest('#logout,[data-action="logout"]');
-    if (!t) return;
-    e.preventDefault();
-    doLogout(true);
-  }
-  document.addEventListener('click', foodyDocClickLogout, { passive: false });
-  
-  // Support ?logout=1 in URL to force logout
-  try {
-    if (new URLSearchParams(location.search).get('logout') === '1') doLogout(true);
-  } catch (_) {}
