@@ -364,6 +364,8 @@
           if (plugs.length) FilePond.registerPlugin(...plugs);
         } catch(e) { console.warn('FilePond plugins', e); }
         const pond = FilePond.create(document.getElementById('photo'), {
+          credits: false,
+          credits: false,
           allowMultiple: false,
           labelIdle: 'Перетащите фото или <span class="filepond--label-action">выберите</span>',
           acceptedFileTypes: ['image/*'],
