@@ -211,3 +211,8 @@ input:focus, textarea:focus { border-color: var(--brand-2); box-shadow: 0 0 0 2p
 .filepond--panel-root { background: #0d1218; border: 1px dashed var(--border); }
 .filepond--drop-label { color: var(--subtext); }
 .filepond--credits { display: none !important; } /* hide watermark */
+
+
+/* FilePond basic dark */
+.filepond--panel-root { background: #0d1218; border: 1px dashed var(--border); }
+.filepond--drop-label { color: var(--subtext); }
