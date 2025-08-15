@@ -263,6 +263,13 @@
   }
 
   // Create tab init (Flatpickr + FilePond)
+  async function fetchProfileCloseTime(){
+    try {
+      const p = await api(`/api/v1/merchant/profile?restaurant_id=${encodeURIComponent(state.rid)}`);
+      state.close_time = (p && p.close_time) || null;
+      return state.close_time;
+    } catch (err) { console.warn('fetchProfileCloseTime', err); return null; }
+  }
   let createInited = false;
   async function initCreateTab(){
     if (createInited) return;
@@ -281,7 +288,7 @@
         // Quick time buttons
         const qt = document.getElementById('quickTime');
         if (qt && expiresPicker) {
-          qt.addEventListener('click', (e) => {
+          qt.addEventListener('click', async (e) => {
             const btn = e.target.closest('button'); if (!btn) return;
             const mins = btn.getAttribute('data-mins');
             const eod = btn.getAttribute('data-eod'); // format "HH:MM"
@@ -293,13 +300,37 @@
               const [hh, mm] = eod.split(':').map(x=>parseInt(x,10)||0);
               const d = new Date();
               d.setHours(hh, mm, 0, 0);
-              if (d < new Date()) d.setDate(d.getDate()+1); // если время прошло — на завтра
+              if (d < new Date()) d.setDate(d.getDate()+1);
+              target = d;
+            } else if (btn.hasAttribute('data-close')) {
+              let hhmm = state.close_time;
+              if (!hhmm) hhmm = await fetchProfileCloseTime();
+              if (!hhmm) { showToast('Укажите время закрытия в профиле'); return; }
+              const [hh, mm] = String(hhmm).split(':').map(x=>parseInt(x,10)||0);
+              const d = new Date();
+              d.setHours(hh, mm, 0, 0);
+              if (d < new Date()) d.setDate(d.getDate()+1);
               target = d;
             }
             if (target) expiresPicker.setDate(target, true);
           }, { passive: true });
         }
         }
+      const photoEl = document.getElementById('photo');
+      // Fallback preview (works without FilePond)
+      if (photoEl) {
+        photoEl.addEventListener('change', () => {
+          if (window.FilePond) return; // FilePond will handle preview
+          const f = photoEl.files && photoEl.files[0];
+          const wrap = document.getElementById('photoPreviewWrap');
+          const img = document.getElementById('photoPreview');
+          if (f && wrap && img) {
+            const url = URL.createObjectURL(f);
+            img.src = url;
+            wrap.classList.remove('hidden');
+          }
+        });
+      }
       if (window.FilePond && document.getElementById('photo')) {
         FilePond.registerPlugin(
           window.FilePondPluginImagePreview,

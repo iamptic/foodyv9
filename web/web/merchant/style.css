@@ -174,3 +174,23 @@ input:focus, textarea:focus { border-color: var(--brand-2); box-shadow: 0 0 0 2p
   .grid.two { grid-template-columns: 1fr; }
   .stats { grid-template-columns: 1fr; }
 }
+
+
+/* Quick time buttons */
+.quick-group { display:flex; gap:8px; flex-wrap:wrap; }
+.btn-ghost {
+  background: #12171e;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-ghost:hover { background: #161c23; border-color: #2c3642; }
+.btn-ghost:active { transform: translateY(1px); }
+
+/* Photo preview fallback */
+.photo-preview { margin-top: 10px; border: 1px dashed var(--border); border-radius: 12px; background: #0d1218; padding: 8px; }
+.photo-preview img { max-width: 100%; display: block; border-radius: 8px; }
+.hidden { display: none !important; }

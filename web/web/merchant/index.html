@@ -135,13 +135,14 @@
             </label>
             <label class="full">Истекает
               <input id="expires_at" name="expires_at" placeholder="Выберите дату и время" required>
-              <div id="quickTime" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-                <button type="button" class="btn-ghost" data-mins="30">+30 мин</button>
-                <button type="button" class="btn-ghost" data-mins="60">+1 час</button>
-                <button type="button" class="btn-ghost" data-mins="120">+2 часа</button>
-                <button type="button" class="btn-ghost" data-eod="21:00">Сегодня 21:00</button>
+              <div id="quickTime" class="quick-group" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                <button type="button" class="btn-ghost quick-btn" data-mins="30">+30 мин</button>
+                <button type="button" class="btn-ghost quick-btn" data-mins="60">+1 час</button>
+                <button type="button" class="btn-ghost quick-btn" data-mins="120">+2 часа</button>
+                <button type="button" class="btn-ghost quick-btn" data-eod="21:00">Сегодня 21:00</button>
+                              <button type="button" class="btn-ghost quick-btn" data-close="1">К закрытию</button>
               </div>
-              <div class="hint">Быстрый выбор: 30–120 минут или «Сегодня 21:00».</div>
+              <div class="hint">Быстрый выбор: 30–120 минут, «Сегодня 21:00» или «К закрытию».</div>
               <div class="hint">Таймер скидок привязан к этой точке.</div>
             </label>
             <label class="full">Категория
@@ -158,6 +159,9 @@
               <input type="file" id="photo" accept="image/*">
               <input type="hidden" name="image_url" id="image_url">
               <div class="hint">Drag&drop, превью, лимит размера, мгновенная загрузка.</div>
+              <div id="photoPreviewWrap" class="photo-preview hidden">
+                <img id="photoPreview" alt="Предпросмотр" />
+              </div>
             </label>
             <label class="full">
               <textarea name="description" rows="3" placeholder="Кратко: состав, для скольких порций и т.п."></textarea>
