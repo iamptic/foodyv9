@@ -82,6 +82,20 @@
   });
 
   // API helper
+        
+  function doLogout(reload=false){
+    try {
+      localStorage.removeItem('foody_restaurant_id');
+      localStorage.removeItem('foody_key');
+      state.rid = ''; state.key = '';
+      showToast('Вы вышли');
+      if (reload) { location.search = ''; location.hash = ''; location.reload(); return; }
+      gate();
+    } catch (e) { console.warn('logout failed', e); }
+  }
+  window.foodyLogout = doLogout;
+  
+  // API helper
   async function api(path, { method='GET', headers={}, body=null, raw=false } = {}) {
     const url = `${state.api}${path}`;
     const h = { 'Content-Type': 'application/json', ...headers };
@@ -413,3 +427,17 @@
   // Init
   gate();
 })();
+
+  // Global delegation for logout (handles #logout or [data-action="logout"])
+  function foodyDocClickLogout(e){
+    const t = e.target.closest && e.target.closest('#logout,[data-action="logout"]');
+    if (!t) return;
+    e.preventDefault();
+    doLogout(true);
+  }
+  document.addEventListener('click', foodyDocClickLogout, { passive: false });
+  
+  // Support ?logout=1 in URL to force logout
+  try {
+    if (new URLSearchParams(location.search).get('logout') === '1') doLogout(true);
+  } catch (_) {}
