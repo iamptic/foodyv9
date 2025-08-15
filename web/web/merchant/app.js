@@ -62,13 +62,14 @@
 
   // Auth gating: if no creds — show AUTH pane only
   function gate() {
-    if (!state.rid || !state.key) {
+    const lo = $('#logoutBtn');
+    if (!state.rid || !state.key) { if (lo) lo.style.display='none';
       activateTab('auth');
       $('#tabs').style.display = 'none';
       $('.bottom-nav').style.display = 'none';
       return false;
     }
-    $('#tabs').style.display = '';
+    $('#tabs').style.display = ''; if (lo) lo.style.display='';
     $('.bottom-nav').style.display = '';
     activateTab('dashboard');
     return true;
@@ -96,21 +97,7 @@
     return ct.includes('application/json') ? res.json() : res.text();
   }
 
-  
-  // ---- Auth tabs toggle & registration UX ----
-  function setAuthMode(mode){
-    const tabs = $$('#authTabs .seg-btn');
-    tabs.forEach(b => b.classList.toggle('active', b.dataset.auth === mode));
-    $('#registerForm')?.classList.toggle('hidden', mode !== 'register');
-    $('#loginForm')?.classList.toggle('hidden', mode !== 'login');
-  }
-  on('#authTabs', 'click', (e) => {
-    const btn = e.target.closest('.seg-btn'); if (!btn) return;
-    const mode = btn.dataset.auth; if (!mode) return;
-    setAuthMode(mode);
-  });
-
-// AUTH
+  // AUTH
   on('#registerForm','submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -191,7 +178,7 @@
       qty_left: Number(fd.get('qty_total') || fd.get('stock')) || 1,
       expires_at: dtLocalToIso(fd.get('expires_at')),
       image_url: fd.get('image_url')?.trim() || null,
-      
+      \1
       category: (fd.get('category')||'').trim() || null,
     };
     try {
@@ -383,8 +370,11 @@
         } catch(e) { console.warn('FilePond plugins', e); }
         const pond = FilePond.create(document.getElementById('photo'), {
           credits: false,
+          credits: false,
           allowMultiple: false,
           labelIdle: 'Перетащите фото или <span class="filepond--label-action">выберите</span>',
+          acceptedFileTypes: ['image/*'],
+          maxFileSize: '5MB',
           acceptedFileTypes: ['image/*'],
           maxFileSize: '5MB',
           server: {
@@ -404,7 +394,7 @@
             }
           }
         });
-}
+      }
       // ensure preview for plain input as fallback
       bindPhotoPreview();
     } catch (err) { console.warn('Create init failed', err); }
